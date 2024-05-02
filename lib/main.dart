@@ -2,76 +2,94 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(LocationTrackerApp());
 }
 
-class MyApp extends StatelessWidget {
+class LocationTrackerApp extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: OrderTrackingPage(),
-    );
-  }
+  _LocationTrackerAppState createState() => _LocationTrackerAppState();
 }
 
-class OrderTrackingPage extends StatefulWidget {
-  @override
-  _OrderTrackingPageState createState() => _OrderTrackingPageState();
-}
-
-class _OrderTrackingPageState extends State<OrderTrackingPage> {
-  final Completer<GoogleMapController> _controller = Completer();
-  final Location _location = Location();
+class _LocationTrackerAppState extends State<LocationTrackerApp> {
+  GoogleMapController? _mapController;
+  Marker? _userMarker;
   List<LatLng> _polylinePoints = [];
-
-  static const LatLng sourceLocation = LatLng(37.33500926, -122.03272188);
 
   @override
   void initState() {
     super.initState();
-    _getLocationUpdates();
+    _initLocationTracking();
   }
 
-  Future<void> _getLocationUpdates() async {
-    _location.onLocationChanged.listen((LocationData locationData) {
-      setState(() {
-        _polylinePoints.add(LatLng(locationData.latitude!, locationData.longitude!));
-      });
+  void _initLocationTracking() async {
+    final Geolocator geolocator = Geolocator();
+    final Position position = await geolocator.getCurrentPosition();
+
+    setState(() {
+      _userMarker = Marker(
+        markerId: MarkerId('user'),
+        position: LatLng(position.latitude, position.longitude),
+        infoWindow: InfoWindow(
+          title: 'My current location',
+          snippet: '${position.latitude}, ${position.longitude}',
+        ),
+      );
+      _polylinePoints.add(LatLng(position.latitude, position.longitude));
     });
+  }
+
+  void _updateLocation() async {
+    final Geolocator geolocator = Geolocator();
+    final Position position = await geolocator.getCurrentPosition();
+
+    setState(() {
+      _userMarker = Marker(
+        markerId: MarkerId('user'),
+        position: LatLng(position.latitude, position.longitude),
+        infoWindow: InfoWindow(
+          title: 'My current location',
+          snippet: '${position.latitude}, ${position.longitude}',
+        ),
+      );
+      _polylinePoints.add(LatLng(position.latitude, position.longitude));
+    });
+
+    // Update polyline on the map
+    _mapController?.animateCamera(CameraUpdate.newLatLng(LatLng(position.latitude, position.longitude)));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Live Location Tracking')),
-      body: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: sourceLocation,
-          zoom: 13.5,
-        ),
-        markers: {
-          Marker(
-            markerId: MarkerId('source'),
-            position: sourceLocation,
-            infoWindow: InfoWindow(
-              title: 'My current location',
-              snippet: 'Lat: ${sourceLocation.latitude}, Lng: ${sourceLocation.longitude}',
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: Text('Real-Time Location Tracker')),
+        body: GoogleMap(
+          initialCameraPosition: CameraPosition(
+            target: LatLng(0, 0), // Initial center (update with user's location)
+            zoom: 15,
+          ),
+          markers: _userMarker != null ? Set.of([_userMarker!]) : Set(),
+          polylines: Set.of([
+            Polyline(
+              polylineId: PolylineId('userPath'),
+              points: _polylinePoints,
+              color: Colors.blue,
+              width: 5,
             ),
-          ),
-        },
-        polylines: {
-          Polyline(
-            polylineId: PolylineId('route'),
-            color: Colors.blue,
-            points: _polylinePoints,
-          ),
-        },
-        onMapCreated: (mapController) {
-          _controller.complete(mapController);
-        },
+          ]),
+          onMapCreated: (controller) {
+            _mapController = controller;
+          },
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _updateLocation,
+          child: Icon(Icons.location_on),
+        ),
       ),
     );
   }
 }
+
